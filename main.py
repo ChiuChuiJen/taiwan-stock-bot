@@ -266,183 +266,307 @@ def generate_analysis(data):
 # ════════════════════════════════════════════════════════
 #  繪圖設定
 # ════════════════════════════════════════════════════════
-BG     = '#0d0d1a'
-CARD   = '#161628'
-GREEN  = '#26de81'
-RED    = '#fc5c65'
-YELLOW = '#fed330'
-BLUE   = '#45aaf2'
-GRAY   = '#8395a7'
-WHITE  = '#f5f6fa'
+BG      = '#0a0a18'
+CARD    = '#12122a'
+CARD2   = '#1a1a35'
+GREEN   = '#00e676'
+GREEN2  = '#1de9b6'
+RED     = '#ff5252'
+YELLOW  = '#ffd740'
+BLUE    = '#40c4ff'
+PURPLE  = '#e040fb'
+GRAY    = '#607d8b'
+GRAY2   = '#455a64'
+WHITE   = '#eceff1'
+ACCENT  = '#7c4dff'
 
 def col(v):   return GREEN if v >= 0 else RED
 def arrow(v): return '▲' if v >= 0 else '▼'
+def badge_col(v): return ('#003300', GREEN) if v >= 0 else ('#330000', RED)
 
-def draw_hbar(ax, items, title):
-    """畫水平長條圖（ETF / 個股）"""
+def rounded_rect(ax, x, y, w, h, radius=0.02, fc=CARD2, ec=GRAY2, lw=0.8, alpha=1.0):
+    from matplotlib.patches import FancyBboxPatch
+    p = FancyBboxPatch((x, y), w, h,
+                       boxstyle=f'round,pad={radius}',
+                       facecolor=fc, edgecolor=ec,
+                       linewidth=lw, alpha=alpha,
+                       transform=ax.transAxes, clip_on=False)
+    ax.add_patch(p)
+
+def sparkline_mini(ax, xs, ys, x0, y0, w, h, color):
+    """在 ax 的 axes 座標裡畫一條迷你折線"""
+    if len(ys) < 2:
+        return
+    ys = np.array(ys, dtype=float)
+    xs = np.arange(len(ys))
+    yn = (ys - ys.min()) / max(ys.max() - ys.min(), 1e-9)
+    px = x0 + xs / (len(xs)-1) * w
+    py = y0 + yn * h
+    ax.plot(px, py, color=color, linewidth=1.2, alpha=0.8,
+            transform=ax.transAxes, clip_on=False, solid_capstyle='round')
+
+def draw_item_cards(ax, items, title, history_map=None):
+    """每個標的畫一張小卡片"""
+    ax.set_facecolor(BG)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis('off')
+
+    # 標題列
+    ax.text(0.5, 0.97, title, ha='center', va='top',
+            color=YELLOW, fontsize=10.5, fontweight='bold')
+
     if not items:
-        ax.set_facecolor(CARD)
-        ax.axis('off')
-        ax.set_title(title, color=YELLOW, fontsize=10, pad=6, fontweight='bold')
         return
 
-    names  = list(items.keys())
-    pcts   = [v['pct']   for v in items.values()]
-    closes = [v['close'] for v in items.values()]
-    ypos   = np.arange(len(names))
-    colors = [col(p) for p in pcts]
-    max_abs = max(abs(p) for p in pcts) if pcts else 1
+    item_list = list(items.items())
+    n = len(item_list)
+    cols = 2
+    rows = (n + 1) // 2
+    card_w = 0.46
+    card_h = 0.80 / rows - 0.04
+    gap_x  = 0.04
+    gap_y  = 0.04
+    start_y = 0.90
 
-    ax.set_facecolor(CARD)
-    bars = ax.barh(ypos, pcts, color=colors, height=0.55, alpha=0.85)
-    ax.set_yticks(ypos)
-    ax.set_yticklabels(names, color=WHITE, fontsize=9)
-    ax.axvline(0, color=GRAY, linewidth=0.5, alpha=0.4)
-    ax.set_xlim(-max_abs * 1.5, max_abs * 3.5)
-    ax.tick_params(axis='x', colors=GRAY, labelsize=7.5)
-    ax.spines[:].set_color(CARD)
-    ax.set_title(title, color=YELLOW, fontsize=10, pad=6, fontweight='bold')
+    for i, (name, v) in enumerate(item_list):
+        row = i // cols
+        col_idx = i % cols
+        x = col_idx * (card_w + gap_x) + 0.02
+        y = start_y - (row + 1) * (card_h + gap_y)
 
-    for i, (p, c) in enumerate(zip(pcts, closes)):
-        offset = max_abs * 0.15 if p >= 0 else -max_abs * 0.15
-        ha = 'left' if p >= 0 else 'right'
-        ax.text(p + offset, i,
-                f'{c:.2f} ({p:+.2f}%)',
-                va='center', ha=ha, color=WHITE, fontsize=7.5,
-                clip_on=False)
+        pct   = v.get('pct', 0)
+        close = v.get('close', 0)
+        prev  = v.get('prev', 0)
+        diff  = close - prev
+        c     = col(pct)
+        bg_c  = '#0d1f0d' if pct >= 0 else '#1f0d0d'
+        ec_c  = '#1a4d1a' if pct >= 0 else '#4d1a1a'
+
+        rounded_rect(ax, x, y, card_w, card_h, radius=0.025,
+                     fc=bg_c, ec=ec_c, lw=0.9)
+
+        # 標的名稱
+        ax.text(x + 0.04, y + card_h - 0.03, name,
+                ha='left', va='top', color=WHITE,
+                fontsize=8.5, fontweight='bold',
+                transform=ax.transAxes, clip_on=False)
+
+        # 收盤價
+        ax.text(x + card_w - 0.03, y + card_h - 0.03,
+                f'{close:.2f}',
+                ha='right', va='top', color=WHITE,
+                fontsize=9, fontweight='bold',
+                transform=ax.transAxes, clip_on=False)
+
+        # 漲跌幅 badge
+        badge_txt = f'{arrow(pct)} {abs(pct):.2f}%'
+        ax.text(x + 0.04, y + 0.04,
+                badge_txt,
+                ha='left', va='bottom', color=c,
+                fontsize=9, fontweight='bold',
+                transform=ax.transAxes, clip_on=False)
+
+        # 漲跌點數
+        ax.text(x + card_w - 0.03, y + 0.04,
+                f'{diff:+.2f}',
+                ha='right', va='bottom', color=c,
+                fontsize=7.5,
+                transform=ax.transAxes, clip_on=False)
+
+        # 迷你 sparkline（如果有歷史）
+        hist = (history_map or {}).get(name)
+        if hist and len(hist) >= 2:
+            sparkline_mini(ax, None, hist,
+                           x + 0.04, y + card_h * 0.35,
+                           card_w - 0.08, card_h * 0.28, c)
+
+def draw_gauge(ax, up_ratio):
+    """半圓情緒量表"""
+    all_segs = [
+        (0.00, 0.20, RED,    '強空'),
+        (0.20, 0.40, '#ff8f00', '偏空'),
+        (0.40, 0.60, YELLOW, '盤整'),
+        (0.60, 0.80, GREEN2, '偏多'),
+        (0.80, 1.00, GREEN,  '強多'),
+    ]
+    cx, cy, r_out, r_in = 0.5, 0.22, 0.38, 0.22
+    for lo, hi, gc, _ in all_segs:
+        thetas = np.linspace(np.pi*(1-hi), np.pi*(1-lo), 40)
+        for t1, t2 in zip(thetas[:-1], thetas[1:]):
+            xs = [cx+r_in*np.cos(t1), cx+r_out*np.cos(t1),
+                  cx+r_out*np.cos(t2), cx+r_in*np.cos(t2)]
+            ys = [cy+r_in*np.sin(t1), cy+r_out*np.sin(t1),
+                  cy+r_out*np.sin(t2), cy+r_in*np.sin(t2)]
+            ax.fill(xs, ys, color=gc, alpha=0.75, transform=ax.transAxes)
+
+    # 指針
+    angle = np.pi * (1 - up_ratio)
+    nr = 0.32
+    ax.annotate('', xy=(cx+nr*np.cos(angle), cy+nr*np.sin(angle)),
+                xytext=(cx, cy),
+                arrowprops=dict(arrowstyle='->', color=WHITE, lw=2.5),
+                transform=ax.transAxes)
+    ax.plot(cx, cy, 'o', color=WHITE, markersize=7, transform=ax.transAxes)
+
+    if up_ratio >= 0.8:   label, lc = '強力偏多', GREEN
+    elif up_ratio >= 0.6: label, lc = '偏多',    GREEN2
+    elif up_ratio >= 0.4: label, lc = '盤整',    YELLOW
+    elif up_ratio >= 0.2: label, lc = '偏空',    '#ff8f00'
+    else:                 label, lc = '強力偏空', RED
+
+    ax.text(cx, 0.60, label, ha='center', va='center', color=lc,
+            fontsize=13, fontweight='bold', transform=ax.transAxes)
+    ax.text(cx, 0.50, f'上漲 {up_ratio*100:.0f}%', ha='center',
+            color=GRAY, fontsize=9, transform=ax.transAxes)
+    ax.text(0.10, 0.06, '空', color=RED, fontsize=8, transform=ax.transAxes)
+    ax.text(0.88, 0.06, '多', color=GREEN, fontsize=8, transform=ax.transAxes)
+
+
+def draw_us_cards(ax, us):
+    """美股四格小卡"""
+    ax.set_facecolor(BG); ax.set_xlim(0,1); ax.set_ylim(0,1); ax.axis('off')
+    ax.text(0.5, 0.97, '美股指數', ha='center', va='top',
+            color=YELLOW, fontsize=10.5, fontweight='bold')
+    items = list(us.items())
+    cols, rows = 2, 2
+    cw, ch = 0.44, 0.34
+    gx, gy = 0.06, 0.06
+    positions = [(0.03, 0.54), (0.53, 0.54), (0.03, 0.12), (0.53, 0.12)]
+    for i, (name, v) in enumerate(items[:4]):
+        x, y = positions[i]
+        pct = v.get('pct', 0)
+        close = v.get('close', 0)
+        c = col(pct)
+        bg = '#0d1f0d' if pct >= 0 else '#1f0d0d'
+        ec = '#1a4d1a' if pct >= 0 else '#4d1a1a'
+        rounded_rect(ax, x, y, cw, ch, radius=0.03, fc=bg, ec=ec, lw=0.8)
+        ax.text(x+0.04, y+ch-0.04, name, ha='left', va='top',
+                color=GRAY, fontsize=8, transform=ax.transAxes)
+        ax.text(x+cw/2, y+ch*0.52, f'{arrow(pct)}{abs(pct):.2f}%',
+                ha='center', va='center', color=c,
+                fontsize=11, fontweight='bold', transform=ax.transAxes)
+        ax.text(x+cw/2, y+0.05, f'{close:,.2f}',
+                ha='center', va='bottom', color=WHITE,
+                fontsize=8, transform=ax.transAxes)
+
 
 def create_chart(data):
-    fig = plt.figure(figsize=(14, 9), facecolor=BG)
+    fig = plt.figure(figsize=(18, 11), facecolor=BG)
     today = datetime.datetime.now().strftime('%Y/%m/%d')
+    weekday = ['一','二','三','四','五','六','日'][datetime.datetime.now().weekday()]
     label = '盤前交易計畫' if MODE == 'premarket' else '盤後分析報告'
-    emoji = '🌅' if MODE == 'premarket' else '📋'
-
-    fig.suptitle(f'{emoji}  台股{label}  ──  {today}',
-                 color=WHITE, fontsize=15, fontweight='bold', y=0.97)
-
-    gs = gridspec.GridSpec(2, 3, figure=fig,
-                           hspace=0.52, wspace=0.38,
-                           left=0.07, right=0.97,
-                           top=0.92, bottom=0.06)
+    time_str = '08:30' if MODE == 'premarket' else '15:00'
 
     twii   = data.get('twii', {})
     etfs   = data.get('etfs', {})
     stocks = data.get('stocks', {})
     us     = data.get('us', {})
-
-    # ── [0, 0:2]  加權指數趨勢（寬版）──────────────────
-    ax1 = fig.add_subplot(gs[0, 0:2])
-    ax1.set_facecolor(CARD)
-    hist = twii.get('history', [])
     pct_val = twii.get('pct', 0)
     line_col = col(pct_val)
 
+    # ── 頂部 header bar ──────────────────────────────────
+    header = fig.add_axes([0, 0.935, 1, 0.065])
+    header.set_facecolor(CARD2); header.axis('off')
+    header.set_xlim(0, 1); header.set_ylim(0, 1)
+    # 左：標題
+    header.text(0.02, 0.5, f'台股{label}', ha='left', va='center',
+                color=WHITE, fontsize=14, fontweight='bold')
+    # 中：加權指數
+    header.text(0.5, 0.72, f'加權指數  {twii.get("close",0):,.0f} 點',
+                ha='center', va='center', color=WHITE, fontsize=13, fontweight='bold')
+    header.text(0.5, 0.25, f'{arrow(pct_val)} {abs(pct_val):.2f}%  ({twii.get("prev",0):,.0f} → {twii.get("close",0):,.0f})',
+                ha='center', va='center', color=line_col, fontsize=10)
+    # 右：日期時間
+    header.text(0.98, 0.6, f'{today}  (週{weekday})',
+                ha='right', va='center', color=GRAY, fontsize=9)
+    header.text(0.98, 0.25, time_str,
+                ha='right', va='center', color=GRAY, fontsize=9)
+
+    # ── 主區域 GridSpec ──────────────────────────────────
+    gs = gridspec.GridSpec(3, 4, figure=fig,
+                           hspace=0.55, wspace=0.35,
+                           left=0.04, right=0.98,
+                           top=0.925, bottom=0.04)
+
+    # ── [0, 0:3]  加權指數折線（寬版，佔3欄）────────────
+    ax1 = fig.add_subplot(gs[0, 0:3])
+    ax1.set_facecolor(CARD)
+    hist = twii.get('history', [])
     if hist and len(hist) >= 2:
         xs = np.arange(len(hist))
-        ax1.fill_between(xs, hist, min(hist) * 0.9995,
-                         alpha=0.25, color=line_col, interpolate=True)
-        ax1.plot(xs, hist, color=line_col, linewidth=2.2,
-                 marker='o', markersize=5,
-                 markerfacecolor=BG, markeredgecolor=line_col, markeredgewidth=1.8)
-        ax1.annotate(f'{hist[-1]:.0f}',
-                     xy=(xs[-1], hist[-1]),
-                     xytext=(5, 6), textcoords='offset points',
-                     color=line_col, fontsize=9, fontweight='bold')
-        days = [f'D-{len(hist)-1-i}' if i < len(hist)-1 else '今日' for i in xs]
-        ax1.set_xticks(xs)
-        ax1.set_xticklabels(days, color=GRAY, fontsize=8.5)
+        mn = min(hist) * 0.9992
+        ax1.fill_between(xs, hist, mn, alpha=0.18, color=line_col)
+        ax1.plot(xs, hist, color=line_col, linewidth=2.5,
+                 marker='o', markersize=6,
+                 markerfacecolor=BG, markeredgecolor=line_col, markeredgewidth=2)
+        for i, (xi, yi) in enumerate(zip(xs, hist)):
+            ax1.annotate(f'{yi:,.0f}', xy=(xi, yi),
+                         xytext=(0, 9), textcoords='offset points',
+                         ha='center', color=line_col, fontsize=8, fontweight='bold')
+        days = [f'D-{len(hist)-1-i}' if i<len(hist)-1 else '今日' for i in xs]
+        ax1.set_xticks(xs); ax1.set_xticklabels(days, color=GRAY, fontsize=9)
+        ypad = (max(hist)-min(hist)) * 0.4
+        ax1.set_ylim(mn, max(hist) + ypad)
+    ax1.tick_params(axis='y', colors=GRAY, labelsize=8.5)
+    ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x,_: f'{x:,.0f}'))
+    for sp in ax1.spines.values(): sp.set_color(CARD2)
+    ax1.set_facecolor(CARD)
+    ax1.grid(axis='y', color=GRAY2, alpha=0.15, linewidth=0.6, linestyle='--')
+    ax1.set_title('近 5 日走勢', color=GRAY, fontsize=9, pad=5, loc='left')
 
-    ax1.set_title(
-        f'加權指數   {twii.get("close", 0):.0f} 點   '
-        f'{arrow(pct_val)} {abs(pct_val):.2f}%',
-        color=line_col, fontsize=11, pad=7, fontweight='bold')
-    ax1.tick_params(axis='y', colors=GRAY, labelsize=8)
-    ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.0f}'))
-    ax1.spines[:].set_color(CARD)
-    ax1.grid(axis='y', color=GRAY, alpha=0.10, linewidth=0.6)
-
-    # ── [0, 2]  美股指數 ────────────────────────────────
-    ax2 = fig.add_subplot(gs[0, 2])
-    ax2.set_facecolor(CARD)
-    if us:
-        us_names = list(us.keys())
-        us_pcts  = [v['pct'] for v in us.values()]
-        ypos = np.arange(len(us_names))
-        max_abs = max(abs(p) for p in us_pcts) if us_pcts else 1
-        ax2.barh(ypos, us_pcts, color=[col(p) for p in us_pcts],
-                 height=0.52, alpha=0.85)
-        ax2.set_yticks(ypos)
-        ax2.set_yticklabels(us_names, color=WHITE, fontsize=9)
-        ax2.set_xlim(-max_abs * 1.5, max_abs * 3.0)
-        ax2.axvline(0, color=GRAY, linewidth=0.5, alpha=0.4)
-        for i, p in enumerate(us_pcts):
-            offset = max_abs * 0.15 if p >= 0 else -max_abs * 0.15
-            ax2.text(p + offset, i, f'{p:+.2f}%',
-                     va='center', ha='left' if p >= 0 else 'right',
-                     color=WHITE, fontsize=7.5, clip_on=False)
-    ax2.set_title('美股（前日收盤）', color=YELLOW, fontsize=10, pad=7, fontweight='bold')
-    ax2.tick_params(colors=GRAY, labelsize=7.5)
-    ax2.spines[:].set_color(CARD)
-
-    # ── [1, 0]  ETF ─────────────────────────────────────
-    ax3 = fig.add_subplot(gs[1, 0])
-    draw_hbar(ax3, etfs, '熱門 ETF')
-
-    # ── [1, 1]  個股 ─────────────────────────────────────
-    ax4 = fig.add_subplot(gs[1, 1])
-    draw_hbar(ax4, stocks, '熱門個股')
-
-    # ── [1, 2]  市場情緒計 ──────────────────────────────
-    ax5 = fig.add_subplot(gs[1, 2])
-    ax5.set_facecolor(CARD)
-    ax5.set_xlim(0, 1)
-    ax5.set_ylim(0, 1)
-    ax5.axis('off')
-    ax5.set_title('市場情緒', color=YELLOW, fontsize=10, pad=7, fontweight='bold')
-
+    # ── [0, 3]  市場情緒量表 ─────────────────────────────
+    ax_gauge = fig.add_subplot(gs[0, 3])
+    ax_gauge.set_facecolor(CARD); ax_gauge.axis('off')
+    ax_gauge.set_title('市場情緒', color=YELLOW, fontsize=10, pad=5, fontweight='bold')
     all_pcts = [v['pct'] for v in {**etfs, **stocks}.values()]
     up_ratio = sum(1 for p in all_pcts if p > 0) / max(len(all_pcts), 1)
+    draw_gauge(ax_gauge, up_ratio)
 
-    if up_ratio >= 0.8:
-        sentiment, sent_col = '強力偏多', GREEN
-    elif up_ratio >= 0.6:
-        sentiment, sent_col = '偏多', GREEN
-    elif up_ratio >= 0.4:
-        sentiment, sent_col = '盤整', YELLOW
-    elif up_ratio >= 0.2:
-        sentiment, sent_col = '偏空', RED
-    else:
-        sentiment, sent_col = '強力偏空', RED
+    # ── [1, 0:2]  熱門 ETF 卡片 ──────────────────────────
+    ax3 = fig.add_subplot(gs[1, 0:2])
+    draw_item_cards(ax3, etfs, '熱門 ETF')
 
-    # 半圓量表
-    r, cx, cy = 0.30, 0.5, 0.38
-    theta_bg = np.linspace(np.pi, 0, 120)
-    ax5.plot(cx + r * np.cos(theta_bg), cy + r * np.sin(theta_bg),
-             color=GRAY, linewidth=8, alpha=0.25, solid_capstyle='round')
+    # ── [1, 2:4]  熱門個股卡片 ───────────────────────────
+    ax4 = fig.add_subplot(gs[1, 2:4])
+    draw_item_cards(ax4, stocks, '熱門個股')
 
-    theta_fg = np.linspace(np.pi, np.pi - up_ratio * np.pi, 120)
-    ax5.plot(cx + r * np.cos(theta_fg), cy + r * np.sin(theta_fg),
-             color=sent_col, linewidth=8, alpha=0.85, solid_capstyle='round')
+    # ── [2, 0:2]  美股指數卡片 ───────────────────────────
+    ax5 = fig.add_subplot(gs[2, 0:2])
+    draw_us_cards(ax5, us)
 
-    # 指針
-    needle_angle = np.pi - up_ratio * np.pi
-    nx = cx + 0.24 * np.cos(needle_angle)
-    ny = cy + 0.24 * np.sin(needle_angle)
-    ax5.annotate('', xy=(nx, ny), xytext=(cx, cy),
-                 arrowprops=dict(arrowstyle='->', color=WHITE, lw=2.0))
-    ax5.plot(cx, cy, 'o', color=WHITE, markersize=6)
+    # ── [2, 2:4]  漲跌統計 bar ───────────────────────────
+    ax6 = fig.add_subplot(gs[2, 2:4])
+    ax6.set_facecolor(CARD)
+    ax6.set_title('今日漲跌分布', color=YELLOW, fontsize=10, pad=5, fontweight='bold')
+    all_items = {**etfs, **stocks}
+    sorted_items = sorted(all_items.items(), key=lambda x: x[1]['pct'], reverse=True)
+    names  = [k for k,_ in sorted_items]
+    pcts   = [v['pct'] for _,v in sorted_items]
+    closes = [v['close'] for _,v in sorted_items]
+    colors_bar = [col(p) for p in pcts]
+    ypos = np.arange(len(names))
+    ax6.barh(ypos, pcts, color=colors_bar, height=0.62, alpha=0.85)
+    ax6.set_yticks(ypos)
+    ax6.set_yticklabels(names, color=WHITE, fontsize=8.5)
+    ax6.axvline(0, color=GRAY, linewidth=0.8, alpha=0.5)
+    max_abs = max(abs(p) for p in pcts) if pcts else 1
+    ax6.set_xlim(-max_abs*1.5, max_abs*2.8)
+    for i, (p, c) in enumerate(zip(pcts, closes)):
+        off = max_abs * 0.12 if p >= 0 else -max_abs*0.12
+        ax6.text(p+off, i, f'{c:.1f}  {p:+.2f}%',
+                 va='center', ha='left' if p>=0 else 'right',
+                 color=WHITE, fontsize=7.5)
+    ax6.tick_params(axis='x', colors=GRAY, labelsize=7.5)
+    for sp in ax6.spines.values(): sp.set_color(CARD2)
+    ax6.grid(axis='x', color=GRAY2, alpha=0.12, linewidth=0.5, linestyle='--')
 
-    # 文字
-    ax5.text(cx, 0.74, sentiment, ha='center', va='center',
-             color=sent_col, fontsize=11, fontweight='bold')
-    ax5.text(cx, 0.62, f'上漲比例 {up_ratio*100:.0f}%',
-             ha='center', va='center', color=GRAY, fontsize=8.5)
-    ax5.text(0.12, 0.10, '空方', ha='center', color=RED, fontsize=8)
-    ax5.text(0.88, 0.10, '多方', ha='center', color=GREEN, fontsize=8)
+    # 底部版權條
+    fig.text(0.98, 0.01, 'Auto generated by TW Stock Bot',
+             ha='right', color=GRAY2, fontsize=7.5)
 
-    # 存成 bytes
     buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=145, bbox_inches='tight',
+    fig.savefig(buf, format='png', dpi=150, bbox_inches='tight',
                 facecolor=BG, edgecolor='none')
     plt.close(fig)
     buf.seek(0)
