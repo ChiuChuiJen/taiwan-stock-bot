@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import matplotlib.font_manager as fm
 import yfinance as yf
-import google.generativeai as genai
+from google import genai
 
 # ════════════════════════════════════════════════════════
 #  環境變數（從 GitHub Secrets 自動帶入，不用手動填）
@@ -21,8 +21,7 @@ import google.generativeai as genai
 MODE      = os.environ.get('MODE', 'premarket')        # premarket / postmarket
 TG_TOKEN  = os.environ.get('TELEGRAM_BOT_TOKEN', '')
 TG_CHAT   = os.environ.get('TELEGRAM_CHAT_ID', '')
-genai.configure(api_key=os.environ.get('GEMINI_API_KEY', ''))
-client    = genai.GenerativeModel('gemini-1.5-flash')
+client    = genai.Client(api_key=os.environ.get('GEMINI_API_KEY', ''))
 
 # ════════════════════════════════════════════════════════
 #  中文字型設定（GitHub Actions Ubuntu 安裝後自動生效）
@@ -229,7 +228,10 @@ def build_prompt(data):
 3. ___"""
 
 def generate_analysis(data):
-    res = client.generate_content(build_prompt(data))
+    res = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=build_prompt(data),
+    )
     return res.text
 
 # ════════════════════════════════════════════════════════
