@@ -2,29 +2,22 @@ name: Telegram 指令監聽
 
 on:
   schedule:
-    # 每 10 分鐘執行一次（台灣時間 07:00~22:00，即 UTC 23:00~14:00）
-    - cron: '*/10 23 * * *'
-    - cron: '*/10 0-14 * * *'
+    # 每 5 分鐘執行一次（Public repo 免費無限）
+    - cron: '*/5 * * * *'
 
-  # 手動觸發測試用
   workflow_dispatch:
 
 permissions:
-  actions: write      # 允許讀寫 Variables
+  actions: write
 
 jobs:
   listen:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 4
 
     steps:
       - name: 取得程式碼
         uses: actions/checkout@v4
-
-      - name: 安裝中文字型
-        run: |
-          sudo apt-get install -y fonts-noto-cjk fonts-noto-cjk-extra -q
-          fc-cache -fv -q
 
       - name: 設定 Python
         uses: actions/setup-python@v5
@@ -32,16 +25,8 @@ jobs:
           python-version: '3.11'
           cache: pip
 
-      - name: 安裝套件
-        run: pip install -r requirements.txt -q
-
-      - name: 清除字型快取
-        run: |
-          python3 -c "
-          import matplotlib, os
-          cache = matplotlib.get_cachedir()
-          [os.remove(os.path.join(cache,f)) for f in os.listdir(cache) if f.endswith(('.json','.pkl'))]
-          "
+      - name: 安裝輕量套件（監聽不需要字型）
+        run: pip install requests groq yfinance -q
 
       - name: 監聽並執行指令
         env:
