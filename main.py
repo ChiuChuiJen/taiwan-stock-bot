@@ -24,13 +24,41 @@ TG_CHAT   = os.environ.get('TELEGRAM_CHAT_ID', '')
 client    = Groq(api_key=os.environ.get('GROQ_API_KEY', ''))
 
 # ════════════════════════════════════════════════════════
-#  中文字型設定（GitHub Actions Ubuntu 安裝後自動生效）
+#  中文字型設定
 # ════════════════════════════════════════════════════════
-plt.rcParams.update({
-    'font.sans-serif': ['Noto Sans CJK TC', 'Noto Sans TC',
-                        'WenQuanYi Micro Hei', 'DejaVu Sans'],
-    'axes.unicode_minus': False,
-})
+import glob as _glob
+
+def _setup_cjk_font():
+    """自動找系統上的 Noto CJK 字型並註冊"""
+    candidates = [
+        '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+        '/usr/share/fonts/opentype/noto/NotoSansCJKtc-Regular.otf',
+        '/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc',
+    ]
+    # 也嘗試 glob 搜尋
+    candidates += _glob.glob('/usr/share/fonts/**/Noto*CJK*.tt[cf]', recursive=True)
+    candidates += _glob.glob('/usr/share/fonts/**/Noto*CJK*.otf', recursive=True)
+
+    for path in candidates:
+        if os.path.exists(path):
+            try:
+                fm.fontManager.addfont(path)
+                prop = fm.FontProperties(fname=path)
+                name = prop.get_name()
+                plt.rcParams['font.sans-serif'] = [name, 'DejaVu Sans']
+                plt.rcParams['axes.unicode_minus'] = False
+                print(f'  ✓ 字型載入成功: {name} ({path})')
+                return True
+            except Exception as e:
+                print(f'  ⚠ 字型載入失敗 {path}: {e}')
+    # fallback
+    plt.rcParams['font.sans-serif'] = ['Noto Sans CJK TC', 'Noto Sans TC',
+                                        'WenQuanYi Micro Hei', 'DejaVu Sans']
+    plt.rcParams['axes.unicode_minus'] = False
+    print('  ⚠ 未找到 CJK 字型，使用 fallback')
+    return False
+
+_setup_cjk_font()
 
 # ════════════════════════════════════════════════════════
 #  監控標的（可自行新增修改）
