@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import matplotlib.font_manager as fm
 import yfinance as yf
-from google import genai
+from groq import Groq
 
 # ════════════════════════════════════════════════════════
 #  環境變數（從 GitHub Secrets 自動帶入，不用手動填）
@@ -21,7 +21,7 @@ from google import genai
 MODE      = os.environ.get('MODE', 'premarket')        # premarket / postmarket
 TG_TOKEN  = os.environ.get('TELEGRAM_BOT_TOKEN', '')
 TG_CHAT   = os.environ.get('TELEGRAM_CHAT_ID', '')
-client    = genai.Client(api_key=os.environ.get('GEMINI_API_KEY', ''))
+client    = Groq(api_key=os.environ.get('GROQ_API_KEY', ''))
 
 # ════════════════════════════════════════════════════════
 #  中文字型設定（GitHub Actions Ubuntu 安裝後自動生效）
@@ -228,11 +228,12 @@ def build_prompt(data):
 3. ___"""
 
 def generate_analysis(data):
-    res = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=build_prompt(data),
+    res = client.chat.completions.create(
+        model='llama-3.3-70b-versatile',
+        messages=[{'role': 'user', 'content': build_prompt(data)}],
+        max_tokens=1200,
     )
-    return res.text
+    return res.choices[0].message.content
 
 # ════════════════════════════════════════════════════════
 #  繪圖設定
