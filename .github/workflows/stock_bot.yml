@@ -2,12 +2,9 @@ name: 台股 TG Bot
 
 on:
   schedule:
-    # 盤前 08:00 台灣時間 (UTC+8) = 00:00 UTC，週一到週五
     - cron: '0 0 * * 1-5'
-    # 盤後 15:00 台灣時間 (UTC+8) = 07:00 UTC，週一到週五
     - cron: '0 7 * * 1-5'
 
-  # 手動觸發（方便測試用）
   workflow_dispatch:
     inputs:
       mode:
@@ -32,12 +29,6 @@ jobs:
         run: |
           sudo apt-get install -y fonts-noto-cjk fonts-noto-cjk-extra
           fc-cache -fv
-          python3 -c "
-          import matplotlib
-          matplotlib.font_manager._load_fontmanager(try_read_cache=False)
-          fonts = [f.name for f in matplotlib.font_manager.fontManager.ttflist if 'Noto' in f.name]
-          print('找到 Noto 字型:', fonts[:5])
-          "
 
       - name: 設定 Python 3.11
         uses: actions/setup-python@v5
@@ -51,13 +42,14 @@ jobs:
       - name: 清除 matplotlib 字型快取
         run: |
           python3 -c "
-          import matplotlib
-          import shutil, os
+          import matplotlib, os
           cache = matplotlib.get_cachedir()
+          removed = 0
           for f in os.listdir(cache):
               if f.endswith('.json') or f.endswith('.pkl'):
                   os.remove(os.path.join(cache, f))
-          print('字型快取已清除:', cache)
+                  removed += 1
+          print(f'清除 {removed} 個快取檔，路徑: {cache}')
           "
 
       - name: 設定執行模式
